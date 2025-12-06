@@ -82,11 +82,11 @@ pub struct SizedDoubleLinkedList<T: Sized, const K: usize>
 where
     Const<K>: ValidK,
 {
-    pub nodes: [MaybeUninit<Node<T>>; K],
-    pub used: u64,
-    pub len: usize,
-    pub tail: Option<usize>,
-    pub head: Option<usize>,
+    nodes: [MaybeUninit<Node<T>>; K],
+    used: u64,
+    len: usize,
+    tail: Option<usize>,
+    head: Option<usize>,
 }
 
 /// A single node in the double-linked list.

@@ -1,3 +1,5 @@
+#![cfg(not(feature = "no-std"))]
+
 #[cfg(test)]
 mod tests {
     use datastructures::DoubleLinkedList::DoubleLinkedList;
