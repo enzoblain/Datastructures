@@ -35,7 +35,8 @@
 
 use crate::{Const, LinkedListError};
 
-use core::mem::MaybeUninit;
+use core::cmp::Ordering;
+use core::mem::{MaybeUninit, swap};
 
 /// Trait for validating capacity constants at compile time.
 /// Valid capacities range from 0 to 63.
@@ -91,6 +92,33 @@ pub struct Node<T> {
     pub next: Option<usize>,
 }
 
+/// Clones the list by iterating through nodes in order and duplicating values.
+impl<T: Clone, const K: usize> Clone for SizedDoubleLinkedList<T, K>
+where
+    Const<K>: ValidK,
+{
+    fn clone(&self) -> Self {
+        let mut new_list: Self = Default::default();
+
+        let mut current = match self.head {
+            Some(index) => index,
+            None => return new_list,
+        };
+
+        loop {
+            let node = unsafe { &*self.nodes[current].as_ptr() };
+            new_list.insert_tail(node.value.clone()).unwrap();
+
+            match node.next {
+                Some(next) => current = next,
+                None => break,
+            }
+        }
+
+        new_list
+    }
+}
+
 impl<T: Sized, const K: usize> Default for SizedDoubleLinkedList<T, K>
 where
     Const<K>: ValidK,
@@ -144,6 +172,14 @@ where
     #[inline]
     fn first_free(&self) -> usize {
         (!self.used).trailing_zeros() as usize
+    }
+
+    /// Returns a cloned copy of the list, preserving element order.
+    pub fn copy(&self) -> Self
+    where
+        T: Clone,
+    {
+        Clone::clone(self)
     }
 
     /// Inserts a value at the end of the list.
@@ -391,9 +427,9 @@ where
 
         if self.len == 1 {
             let only = self.head.unwrap();
-            let idx = unsafe { self.nodes[only].assume_init_ref() }.index;
+            let index = unsafe { self.nodes[only].assume_init_ref() }.index;
 
-            self.remove_used(idx);
+            self.remove_used(index);
             self.nodes[only] = MaybeUninit::uninit();
             self.head = None;
             self.tail = None;
@@ -406,7 +442,7 @@ where
         if index == 0 {
             let old = self.head.unwrap();
 
-            let (idx, next_index) = {
+            let (index, next_index) = {
                 let n = unsafe { self.nodes[old].assume_init_ref() };
                 (n.index, n.next.unwrap())
             };
@@ -414,7 +450,7 @@ where
             let next = unsafe { self.nodes[next_index].assume_init_mut() };
             next.prev = None;
 
-            self.remove_used(idx);
+            self.remove_used(index);
             self.nodes[old] = MaybeUninit::uninit();
 
             self.head = Some(next_index);
@@ -426,7 +462,7 @@ where
         if index == self.len - 1 {
             let old = self.tail.unwrap();
 
-            let (idx, prev_index) = {
+            let (index, prev_index) = {
                 let n = unsafe { self.nodes[old].assume_init_ref() };
                 (n.index, n.prev.unwrap())
             };
@@ -434,7 +470,7 @@ where
             let prev = unsafe { self.nodes[prev_index].assume_init_mut() };
             prev.next = None;
 
-            self.remove_used(idx);
+            self.remove_used(index);
             self.nodes[old] = MaybeUninit::uninit();
 
             self.tail = Some(prev_index);
@@ -459,7 +495,7 @@ where
             };
         }
 
-        let (idx, prev_index, next_index) = {
+        let (index, prev_index, next_index) = {
             let n = unsafe { self.nodes[current].assume_init_ref() };
             (n.index, n.prev, n.next)
         };
@@ -476,10 +512,426 @@ where
             self.tail = prev_index;
         }
 
-        self.remove_used(idx);
+        self.remove_used(index);
         self.nodes[current] = MaybeUninit::uninit();
         self.len -= 1;
 
         Ok(())
+    }
+
+    /// Iterates through all nodes in the list and applies a function to each element.
+    ///
+    /// This function traverses the list from head to tail, calling the provided closure
+    /// for each node's value. It allows mutable access to each element during iteration.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - A closure that takes a mutable reference to each element and performs some computation
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use datastructures::DoubleLinkedList::SizedDoubleLinkedList;
+    ///
+    /// let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+    /// list.insert_tail(1);
+    /// list.insert_tail(2);
+    /// list.insert_tail(3);
+    ///
+    /// list.iter_and_compute(|val| *val *= 2);
+    /// // All elements are now doubled
+    /// ```
+    pub fn iter_and_compute(&mut self, f: impl Fn(&mut T)) {
+        let mut current = match self.head {
+            Some(index) => index,
+            None => return,
+        };
+
+        loop {
+            let node = unsafe { &mut *self.nodes[current].as_mut_ptr() };
+            f(&mut node.value);
+
+            match node.next {
+                Some(next_index) => current = next_index,
+                None => break,
+            }
+        }
+    }
+
+    /// Traverses the list and returns the first node that matches the predicate.
+    ///
+    /// Starts from the head and walks forward until a value satisfies the provided
+    /// predicate, returning the corresponding node. Returns `None` when no element
+    /// matches.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Predicate applied to each value to determine a match
+    fn get_where(&self, f: impl Fn(&T) -> bool) -> Option<&Node<T>> {
+        let mut current = self.head?;
+
+        loop {
+            let node = unsafe { &*self.nodes[current].as_ptr() };
+            if f(&node.value) {
+                return Some(node);
+            }
+
+            match node.next {
+                Some(next_index) => current = next_index,
+                None => break,
+            }
+        }
+
+        None
+    }
+
+    /// Returns the index of the first node whose value matches the predicate.
+    ///
+    /// Traverses the list from head to tail and evaluates the predicate on each
+    /// element, returning the index of the first match. If no element satisfies
+    /// the predicate, `None` is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Predicate applied to each value to find a match
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use datastructures::DoubleLinkedList::SizedDoubleLinkedList;
+    ///
+    /// let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+    /// list.insert_tail(10);
+    /// list.insert_tail(20);
+    /// list.insert_tail(30);
+    ///
+    /// let index = list.get_index_where(|v| *v == 20);
+    /// assert_eq!(index, Some(1));
+    /// ```
+    pub fn get_index_where(&self, f: impl Fn(&T) -> bool) -> Option<usize> {
+        self.get_where(f).map(|n| n.index)
+    }
+
+    /// Returns a reference to the first value that matches the predicate.
+    ///
+    /// Iterates from head to tail and applies the predicate to each value,
+    /// returning a reference to the first matching element. If no match is
+    /// found, `None` is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Predicate used to identify a matching value
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use datastructures::DoubleLinkedList::SizedDoubleLinkedList;
+    ///
+    /// let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+    /// list.insert_tail(5);
+    /// list.insert_tail(15);
+    ///
+    /// let value = list.get_value_where(|v| *v > 10);
+    /// assert_eq!(value, Some(&15));
+    /// ```
+    pub fn get_value_where(&self, f: impl Fn(&T) -> bool) -> Option<&T> {
+        self.get_where(f).map(|n| &n.value)
+    }
+
+    /// Sorts the list in-place using a stable merge sort and the provided comparator.
+    ///
+    /// The comparator should return an [`Ordering`] for two values, following the same
+    /// convention as `std::cmp::Ord::cmp`. The sort is **stable**, preserving the
+    /// relative order of elements that compare equal.
+    ///
+    /// # Arguments
+    ///
+    /// * `compare` - Comparator function defining the ordering between two values
+    pub fn sort_by(&mut self, mut compare: impl FnMut(&T, &T) -> Ordering) {
+        if self.len <= 1 {
+            return;
+        }
+
+        // Collect node indices following the current linked order into a stack-allocated buffer.
+        let mut indices_buf: [MaybeUninit<usize>; K] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        let mut current = self.head.unwrap();
+
+        for slot in indices_buf.iter_mut().take(self.len) {
+            slot.write(current);
+
+            let node = unsafe { &*self.nodes[current].as_ptr() };
+            match node.next {
+                Some(next) => current = next,
+                None => break,
+            }
+        }
+
+        // Secondary buffer for merges.
+        let mut buffer_buf: [MaybeUninit<usize>; K] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+
+        let len = self.len;
+
+        // SAFETY: the first `len` slots are initialized above. We transmute to slices of `usize`.
+        let mut src: &mut [usize] =
+            unsafe { &mut *(&mut indices_buf[..len] as *mut [MaybeUninit<usize>] as *mut [usize]) };
+        let mut dst: &mut [usize] =
+            unsafe { &mut *(&mut buffer_buf[..len] as *mut [MaybeUninit<usize>] as *mut [usize]) };
+
+        // Comparator on indices delegating to node values.
+        let mut cmp_indices = |a: usize, b: usize| {
+            let va = unsafe { &*self.nodes[a].as_ptr() };
+            let vb = unsafe { &*self.nodes[b].as_ptr() };
+
+            compare(&va.value, &vb.value)
+        };
+
+        let mut width = 1;
+
+        while width < len {
+            let mut i = 0;
+            while i < len {
+                let mid = (i + width).min(len);
+                let end = (i + 2 * width).min(len);
+
+                // Merge [i, mid) and [mid, end) from src into dst.
+                let (mut left, mut right, mut k) = (i, mid, i);
+
+                while left < mid && right < end {
+                    if cmp_indices(src[left], src[right]) != Ordering::Greater {
+                        dst[k] = src[left];
+
+                        left += 1;
+                    } else {
+                        dst[k] = src[right];
+
+                        right += 1;
+                    }
+                    k += 1;
+                }
+
+                while left < mid {
+                    dst[k] = src[left];
+
+                    left += 1;
+                    k += 1;
+                }
+
+                while right < end {
+                    dst[k] = src[right];
+
+                    right += 1;
+                    k += 1;
+                }
+
+                i += 2 * width;
+            }
+
+            width *= 2;
+            swap(&mut src, &mut dst);
+        }
+
+        self.head = Some(src[0]);
+        self.tail = Some(*src.last().unwrap());
+
+        for (pos, &index) in src.iter().enumerate() {
+            let prev = if pos == 0 { None } else { Some(src[pos - 1]) };
+
+            let next = if pos + 1 == len {
+                None
+            } else {
+                Some(src[pos + 1])
+            };
+
+            let node = unsafe { self.nodes[index].assume_init_mut() };
+
+            node.prev = prev;
+            node.next = next;
+        }
+    }
+
+    /// Returns a sorted clone of the list using the provided comparator.
+    ///
+    /// The original list remains unchanged; the returned list is sorted with the
+    /// same stable merge sort logic as [`sort_by`]. Requires `T: Clone` to
+    /// duplicate elements into the new list without heap allocation.
+    pub fn get_sorted_by(&self, compare: impl FnMut(&T, &T) -> Ordering) -> Self
+    where
+        T: Clone,
+    {
+        let mut cloned = self.clone();
+
+        cloned.sort_by(compare);
+        cloned
+    }
+
+    /// Returns the backing nodes array (cloned) along with the current length.
+    ///
+    /// Unused slots remain uninitialized (`MaybeUninit::uninit()`), while used slots
+    /// hold cloned `Node` values at their original indices. This avoids heap
+    /// allocation and is suitable for `no_std` contexts.
+    pub fn as_array(&self) -> ([MaybeUninit<Node<T>>; K], usize)
+    where
+        T: Clone,
+    {
+        let mut nodes_copy: [MaybeUninit<Node<T>>; K] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+
+        let mut current = match self.head {
+            Some(index) => index,
+            None => return (nodes_copy, 0),
+        };
+
+        loop {
+            let node = unsafe { &*self.nodes[current].as_ptr() };
+
+            let cloned = Node {
+                value: node.value.clone(),
+                index: node.index,
+                prev: node.prev,
+                next: node.next,
+            };
+
+            nodes_copy[current] = MaybeUninit::new(cloned);
+
+            match node.next {
+                Some(next) => current = next,
+                None => break,
+            }
+        }
+
+        (nodes_copy, self.len)
+    }
+
+    /// Selects up to `N` smallest values according to the comparator using quickselect,
+    /// then returns them sorted by the same comparator.
+    ///
+    /// The function performs an in-place quickselect on stack-allocated index buffers
+    /// to partition the first `N` minimal elements (by `compare`) to the front. The
+    /// returned array contains cloned **values** for those elements, sorted by the
+    /// provided comparator. The accompanying `usize` indicates how many entries are
+    /// initialized (min(`N`, `self.len()`)).
+    pub fn select_n_first_by<const N: usize>(
+        &self,
+        mut compare: impl FnMut(&T, &T) -> Ordering,
+    ) -> ([MaybeUninit<T>; N], usize)
+    where
+        T: Clone,
+    {
+        let mut out: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+
+        if self.len == 0 || N == 0 {
+            return (out, 0);
+        }
+
+        // Gather indices in list order.
+        let mut indices_buf: [MaybeUninit<usize>; K] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        let mut current = self.head.unwrap();
+
+        for slot in indices_buf.iter_mut().take(self.len) {
+            slot.write(current);
+
+            let node = unsafe { &*self.nodes[current].as_ptr() };
+            match node.next {
+                Some(next) => current = next,
+                None => break,
+            }
+        }
+
+        let len = self.len;
+        let target = core::cmp::min(N, len);
+
+        // SAFETY: first `len` slots initialized above.
+        let indices: &mut [usize] =
+            unsafe { &mut *(&mut indices_buf[..len] as *mut [MaybeUninit<usize>] as *mut [usize]) };
+
+        let mut cmp_indices = |a: usize, b: usize| {
+            let va = unsafe { &*self.nodes[a].as_ptr() };
+            let vb = unsafe { &*self.nodes[b].as_ptr() };
+
+            compare(&va.value, &vb.value)
+        };
+
+        // Hoare partition for quickselect.
+        fn partition(
+            arr: &mut [usize],
+            left: usize,
+            right: usize,
+            mut cmp: impl FnMut(usize, usize) -> Ordering,
+        ) -> usize {
+            let pivot = arr[(left + right) / 2];
+            let mut i = left;
+            let mut j = right;
+
+            loop {
+                while cmp(arr[i], pivot) == Ordering::Less {
+                    i += 1;
+                }
+
+                while cmp(arr[j], pivot) == Ordering::Greater {
+                    if j == 0 {
+                        break;
+                    }
+
+                    j -= 1;
+                }
+
+                if i >= j {
+                    return j;
+                }
+
+                arr.swap(i, j);
+
+                i += 1;
+
+                if j == 0 {
+                    return 0;
+                }
+
+                j -= 1;
+            }
+        }
+
+        if len > 1 {
+            let mut left = 0;
+            let mut right = len - 1;
+            let select_pos = target - 1;
+
+            while left < right {
+                let pivot = partition(indices, left, right, &mut cmp_indices);
+
+                if select_pos <= pivot {
+                    if pivot == 0 {
+                        break;
+                    }
+
+                    right = pivot;
+                } else {
+                    left = pivot + 1;
+                }
+            }
+        }
+
+        // Sort the first `target` indices to return values in order.
+        if target > 1 {
+            for i in 1..target {
+                let mut j = i;
+                while j > 0 && cmp_indices(indices[j], indices[j - 1]) == Ordering::Less {
+                    indices.swap(j, j - 1);
+                    j -= 1;
+                }
+            }
+        }
+
+        // Copy the first `target` values (ordered) into output buffer.
+        for (dst, &index) in out.iter_mut().take(target).zip(indices.iter().take(target)) {
+            let node = unsafe { &*self.nodes[index].as_ptr() };
+
+            dst.write(node.value.clone());
+        }
+
+        (out, target)
     }
 }

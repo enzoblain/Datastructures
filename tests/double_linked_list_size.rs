@@ -319,4 +319,253 @@ mod tests {
         assert!(list.insert_tail(100).is_ok());
         assert_eq!(*list.get(0).unwrap(), 100);
     }
+
+    #[test]
+    fn test_iter_and_compute() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        // Insert elements 1, 2, 3
+        assert!(list.insert_tail(1).is_ok());
+        assert!(list.insert_tail(2).is_ok());
+        assert!(list.insert_tail(3).is_ok());
+
+        // Double all elements
+        list.iter_and_compute(|val| *val *= 2);
+
+        // Verify all elements have been doubled
+        assert_eq!(*list.get(0).unwrap(), 2);
+        assert_eq!(*list.get(1).unwrap(), 4);
+        assert_eq!(*list.get(2).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_iter_and_compute_empty_list() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        // This should not panic on an empty list
+        list.iter_and_compute(|val| *val += 1);
+
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_iter_and_compute_complex_operation() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        assert!(list.insert_tail(5).is_ok());
+        assert!(list.insert_tail(10).is_ok());
+        assert!(list.insert_tail(15).is_ok());
+
+        // Add 100 to each element and then multiply by 2
+        list.iter_and_compute(|val| {
+            *val += 100;
+            *val *= 2;
+        });
+
+        assert_eq!(*list.get(0).unwrap(), 210); // (5 + 100) * 2
+        assert_eq!(*list.get(1).unwrap(), 220); // (10 + 100) * 2
+        assert_eq!(*list.get(2).unwrap(), 230); // (15 + 100) * 2
+    }
+
+    #[test]
+    fn test_sort_by_ascending() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        for v in [5, 1, 3, 2, 4] {
+            assert!(list.insert_tail(v).is_ok());
+        }
+
+        list.sort_by(|a, b| a.cmp(b));
+
+        for (i, expected) in (1..=5).enumerate() {
+            assert_eq!(*list.get(i).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn test_sort_by_stable_with_duplicates() {
+        let mut list: SizedDoubleLinkedList<(i32, usize), 10> = Default::default();
+
+        let items = [(2, 0), (1, 0), (2, 1), (1, 1), (2, 2)];
+
+        for item in items {
+            assert!(list.insert_tail(item).is_ok());
+        }
+
+        // Sort only by the first field; stability should keep second field order for equals.
+        list.sort_by(|a, b| a.0.cmp(&b.0));
+
+        // Expect all (1, *) first preserving insertion order, then (2, *) preserving order.
+        let expected = [(1, 0), (1, 1), (2, 0), (2, 1), (2, 2)];
+
+        for (i, exp) in expected.iter().enumerate() {
+            assert_eq!(*list.get(i).unwrap(), *exp);
+        }
+    }
+
+    #[test]
+    fn test_get_sorted_by_does_not_mutate_original() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        for v in [3, 1, 2] {
+            assert!(list.insert_tail(v).is_ok());
+        }
+
+        let sorted = list.get_sorted_by(|a, b| a.cmp(b));
+
+        // Original remains unchanged
+        assert_eq!(*list.get(0).unwrap(), 3);
+        assert_eq!(*list.get(1).unwrap(), 1);
+        assert_eq!(*list.get(2).unwrap(), 2);
+
+        // Sorted copy is ordered
+        assert_eq!(*sorted.get(0).unwrap(), 1);
+        assert_eq!(*sorted.get(1).unwrap(), 2);
+        assert_eq!(*sorted.get(2).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_get_sorted_by_empty_list() {
+        let list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        let sorted = list.get_sorted_by(|a, b| a.cmp(b));
+
+        assert!(sorted.is_empty());
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_copy_preserves_order_and_is_independent() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        for v in [1, 3, 2] {
+            assert!(list.insert_tail(v).is_ok());
+        }
+
+        let mut cloned = list.copy();
+
+        // Same order in the clone
+        assert_eq!(*cloned.get(0).unwrap(), 1);
+        assert_eq!(*cloned.get(1).unwrap(), 3);
+        assert_eq!(*cloned.get(2).unwrap(), 2);
+
+        // Mutate clone, original stays unchanged
+        cloned.iter_and_compute(|v| *v *= 10);
+
+        assert_eq!(*cloned.get(0).unwrap(), 10);
+        assert_eq!(*cloned.get(1).unwrap(), 30);
+        assert_eq!(*cloned.get(2).unwrap(), 20);
+
+        assert_eq!(*list.get(0).unwrap(), 1);
+        assert_eq!(*list.get(1).unwrap(), 3);
+        assert_eq!(*list.get(2).unwrap(), 2);
+    }
+
+    #[test]
+    fn test_get_index_where() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        assert!(list.insert_tail(5).is_ok());
+        assert!(list.insert_tail(10).is_ok());
+        assert!(list.insert_tail(15).is_ok());
+
+        let idx = list.get_index_where(|v| *v > 7);
+        assert_eq!(idx, Some(1));
+
+        let none_idx = list.get_index_where(|v| *v == 99);
+        assert!(none_idx.is_none());
+    }
+
+    #[test]
+    fn test_get_value_where() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        assert!(list.insert_tail(3).is_ok());
+        assert!(list.insert_tail(4).is_ok());
+        assert!(list.insert_tail(5).is_ok());
+
+        let val = list.get_value_where(|v| *v % 2 == 0);
+        assert_eq!(val, Some(&4));
+
+        let none_val = list.get_value_where(|v| *v < 0);
+        assert!(none_val.is_none());
+    }
+
+    #[test]
+    fn test_select_n_first_by_returns_minimals() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        for v in [5, 1, 4, 2, 3] {
+            assert!(list.insert_tail(v).is_ok());
+        }
+
+        let (arr, len) = list.select_n_first_by::<2>(|a, b| a.cmp(b));
+        assert_eq!(len, 2);
+
+        let mut values = [0; 2];
+        unsafe {
+            values[0] = *arr[0].assume_init_ref();
+            values[1] = *arr[1].assume_init_ref();
+        }
+
+        assert_eq!(values, [1, 2]);
+
+        // original list untouched
+        assert_eq!(list.len(), 5);
+    }
+
+    #[test]
+    fn test_select_n_first_by_handles_n_greater_than_len() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        for v in [7, 2, 9] {
+            assert!(list.insert_tail(v).is_ok());
+        }
+
+        let (arr, len) = list.select_n_first_by::<5>(|a, b| a.cmp(b));
+        assert_eq!(len, 3);
+
+        let mut values = Vec::with_capacity(len);
+        unsafe {
+            for node in arr.iter().take(len) {
+                values.push(*node.assume_init_ref());
+            }
+        }
+
+        assert_eq!(values, vec![2, 7, 9]);
+    }
+
+    #[test]
+    fn test_as_array_returns_cloned_nodes_and_len() {
+        let mut list: SizedDoubleLinkedList<i32, 10> = Default::default();
+
+        assert!(list.insert_tail(10).is_ok());
+        assert!(list.insert_tail(20).is_ok());
+        assert!(list.insert_tail(30).is_ok());
+
+        let (nodes, len) = list.as_array();
+
+        assert_eq!(len, 3);
+
+        unsafe {
+            let n0 = nodes[0].assume_init_ref();
+            let n1 = nodes[1].assume_init_ref();
+            let n2 = nodes[2].assume_init_ref();
+
+            assert_eq!(n0.value, 10);
+            assert_eq!(n0.index, 0);
+
+            assert_eq!(n1.value, 20);
+            assert_eq!(n1.index, 1);
+
+            assert_eq!(n2.value, 30);
+            assert_eq!(n2.index, 2);
+        }
+
+        // Original list remains intact
+        assert_eq!(list.len(), 3);
+        assert_eq!(*list.get(0).unwrap(), 10);
+        assert_eq!(*list.get(1).unwrap(), 20);
+        assert_eq!(*list.get(2).unwrap(), 30);
+    }
 }
