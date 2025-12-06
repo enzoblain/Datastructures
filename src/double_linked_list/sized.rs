@@ -36,7 +36,15 @@
 use crate::{Const, LinkedListError};
 
 use core::cmp::Ordering;
-use core::mem::{MaybeUninit, swap};
+use core::mem::MaybeUninit;
+
+#[cfg(feature = "no-std")]
+use core::mem::swap;
+
+#[cfg(not(feature = "no-std"))]
+extern crate std;
+#[cfg(not(feature = "no-std"))]
+use std::vec::Vec;
 
 /// Trait for validating capacity constants at compile time.
 /// Valid capacities range from 0 to 63.
@@ -543,7 +551,7 @@ where
     /// ```
     pub fn iter_and_compute(&mut self, f: impl Fn(&mut T)) {
         let mut current = match self.head {
-            Some(index) => index,
+            Some(idx) => idx,
             None => return,
         };
 
@@ -552,7 +560,7 @@ where
             f(&mut node.value);
 
             match node.next {
-                Some(next_index) => current = next_index,
+                Some(next_idx) => current = next_idx,
                 None => break,
             }
         }
@@ -577,7 +585,7 @@ where
             }
 
             match node.next {
-                Some(next_index) => current = next_index,
+                Some(next_idx) => current = next_idx,
                 None => break,
             }
         }
@@ -644,9 +652,12 @@ where
     /// convention as `std::cmp::Ord::cmp`. The sort is **stable**, preserving the
     /// relative order of elements that compare equal.
     ///
+    /// This version uses stack-allocated buffers for `no-std` compatibility.
+    ///
     /// # Arguments
     ///
     /// * `compare` - Comparator function defining the ordering between two values
+    #[cfg(feature = "no-std")]
     pub fn sort_by(&mut self, mut compare: impl FnMut(&T, &T) -> Ordering) {
         if self.len <= 1 {
             return;
@@ -735,7 +746,7 @@ where
         self.head = Some(src[0]);
         self.tail = Some(*src.last().unwrap());
 
-        for (pos, &index) in src.iter().enumerate() {
+        for (pos, &idx) in src.iter().enumerate() {
             let prev = if pos == 0 { None } else { Some(src[pos - 1]) };
 
             let next = if pos + 1 == len {
@@ -744,10 +755,10 @@ where
                 Some(src[pos + 1])
             };
 
-            let node = unsafe { self.nodes[index].assume_init_mut() };
+            let n = unsafe { self.nodes[idx].assume_init_mut() };
 
-            node.prev = prev;
-            node.next = next;
+            n.prev = prev;
+            n.next = next;
         }
     }
 
@@ -756,6 +767,7 @@ where
     /// The original list remains unchanged; the returned list is sorted with the
     /// same stable merge sort logic as [`sort_by`]. Requires `T: Clone` to
     /// duplicate elements into the new list without heap allocation.
+    #[cfg(feature = "no-std")]
     pub fn get_sorted_by(&self, compare: impl FnMut(&T, &T) -> Ordering) -> Self
     where
         T: Clone,
@@ -779,23 +791,23 @@ where
             unsafe { MaybeUninit::uninit().assume_init() };
 
         let mut current = match self.head {
-            Some(index) => index,
+            Some(idx) => idx,
             None => return (nodes_copy, 0),
         };
 
         loop {
-            let node = unsafe { &*self.nodes[current].as_ptr() };
+            let n = unsafe { &*self.nodes[current].as_ptr() };
 
             let cloned = Node {
-                value: node.value.clone(),
-                index: node.index,
-                prev: node.prev,
-                next: node.next,
+                value: n.value.clone(),
+                index: n.index,
+                prev: n.prev,
+                next: n.next,
             };
 
             nodes_copy[current] = MaybeUninit::new(cloned);
 
-            match node.next {
+            match n.next {
                 Some(next) => current = next,
                 None => break,
             }
@@ -812,6 +824,7 @@ where
     /// returned array contains cloned **values** for those elements, sorted by the
     /// provided comparator. The accompanying `usize` indicates how many entries are
     /// initialized (min(`N`, `self.len()`)).
+    #[cfg(feature = "no-std")]
     pub fn select_n_first_by<const N: usize>(
         &self,
         mut compare: impl FnMut(&T, &T) -> Ordering,
@@ -833,8 +846,8 @@ where
         for slot in indices_buf.iter_mut().take(self.len) {
             slot.write(current);
 
-            let node = unsafe { &*self.nodes[current].as_ptr() };
-            match node.next {
+            let n = unsafe { &*self.nodes[current].as_ptr() };
+            match n.next {
                 Some(next) => current = next,
                 None => break,
             }
@@ -926,12 +939,147 @@ where
         }
 
         // Copy the first `target` values (ordered) into output buffer.
-        for (dst, &index) in out.iter_mut().take(target).zip(indices.iter().take(target)) {
-            let node = unsafe { &*self.nodes[index].as_ptr() };
+        for (dst, &idx) in out.iter_mut().take(target).zip(indices.iter().take(target)) {
+            let n = unsafe { &*self.nodes[idx].as_ptr() };
 
-            dst.write(node.value.clone());
+            dst.write(n.value.clone());
         }
 
         (out, target)
+    }
+
+    /// Sorts the list in-place using standard library's sort (faster than no_std version).
+    ///
+    /// Sorts the list in-place using the provided comparator.
+    ///
+    /// The comparator should return an [`Ordering`] for two values, following the same
+    /// convention as `std::cmp::Ord::cmp`. The sort is **stable**, preserving the
+    /// relative order of elements that compare equal.
+    ///
+    /// This version uses `Vec` and standard library sorting for better performance
+    /// when `no-std` feature is not enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `compare` - Comparator function defining the ordering between two values
+    #[cfg(not(feature = "no-std"))]
+    pub fn sort_by(&mut self, mut compare: impl FnMut(&T, &T) -> Ordering) {
+        if self.len <= 1 {
+            return;
+        }
+
+        let mut indices = Vec::with_capacity(self.len);
+        let mut current = self.head.unwrap();
+
+        loop {
+            indices.push(current);
+            let node = unsafe { &*self.nodes[current].as_ptr() };
+            match node.next {
+                Some(next) => current = next,
+                None => break,
+            }
+        }
+
+        indices.sort_unstable_by(|&a, &b| {
+            let va = unsafe { &*self.nodes[a].as_ptr() };
+            let vb = unsafe { &*self.nodes[b].as_ptr() };
+            compare(&va.value, &vb.value)
+        });
+
+        self.head = Some(indices[0]);
+        self.tail = Some(*indices.last().unwrap());
+
+        for (pos, &idx) in indices.iter().enumerate() {
+            let prev = if pos == 0 {
+                None
+            } else {
+                Some(indices[pos - 1])
+            };
+            let next = if pos + 1 == self.len {
+                None
+            } else {
+                Some(indices[pos + 1])
+            };
+            let n = unsafe { self.nodes[idx].assume_init_mut() };
+            n.prev = prev;
+            n.next = next;
+        }
+    }
+
+    /// Returns a sorted clone using standard library (faster than no_std version).
+    ///
+    /// This version is available only when the `no-std` feature is **not** enabled.
+    /// Uses `sort_by` internally for optimal performance with heap allocation.
+    ///
+    /// # Arguments
+    ///
+    /// * `compare` - Comparator function defining the ordering between two values
+    #[cfg(not(feature = "no-std"))]
+    pub fn get_sorted_by(&self, compare: impl FnMut(&T, &T) -> Ordering) -> Self
+    where
+        T: Clone,
+    {
+        let mut cloned = self.clone();
+        cloned.sort_by(compare);
+        cloned
+    }
+
+    /// Selects and returns up to `N` smallest values using Vec (faster than no_std version).
+    ///
+    /// This version is available only when the `no-std` feature is **not** enabled.
+    /// Collects indices into a `Vec`, uses `select_nth_unstable_by` for optimal performance,
+    /// then sorts the selected values before returning.
+    ///
+    /// # Arguments
+    ///
+    /// * `compare` - Comparator function defining the ordering between two values
+    #[cfg(not(feature = "no-std"))]
+    pub fn select_n_first_by<const N: usize>(
+        &self,
+        mut compare: impl FnMut(&T, &T) -> Ordering,
+    ) -> (Vec<T>, usize)
+    where
+        T: Clone,
+    {
+        if self.len == 0 || N == 0 {
+            return (Vec::new(), 0);
+        }
+
+        let mut indices = Vec::with_capacity(self.len);
+        let mut current = self.head.unwrap();
+
+        loop {
+            indices.push(current);
+            let n = unsafe { &*self.nodes[current].as_ptr() };
+            match n.next {
+                Some(next) => current = next,
+                None => break,
+            }
+        }
+
+        let target = core::cmp::min(N, self.len);
+
+        let mut cmp_indices = |&a: &usize, &b: &usize| {
+            let va = unsafe { &*self.nodes[a].as_ptr() };
+            let vb = unsafe { &*self.nodes[b].as_ptr() };
+            compare(&va.value, &vb.value)
+        };
+
+        if target < self.len {
+            indices.select_nth_unstable_by(target - 1, &mut cmp_indices);
+        }
+
+        indices.truncate(target);
+        indices.sort_unstable_by(&mut cmp_indices);
+
+        let values = indices
+            .iter()
+            .map(|&idx| {
+                let n = unsafe { &*self.nodes[idx].as_ptr() };
+                n.value.clone()
+            })
+            .collect();
+
+        (values, target)
     }
 }

@@ -499,16 +499,26 @@ mod tests {
             assert!(list.insert_tail(v).is_ok());
         }
 
-        let (arr, len) = list.select_n_first_by::<2>(|a, b| a.cmp(b));
-        assert_eq!(len, 2);
+        #[cfg(feature = "no-std")]
+        {
+            let (arr, len) = list.select_n_first_by::<2>(|a, b| a.cmp(b));
+            assert_eq!(len, 2);
 
-        let mut values = [0; 2];
-        unsafe {
-            values[0] = *arr[0].assume_init_ref();
-            values[1] = *arr[1].assume_init_ref();
+            let mut values = [0; 2];
+            unsafe {
+                values[0] = *arr[0].assume_init_ref();
+                values[1] = *arr[1].assume_init_ref();
+            }
+
+            assert_eq!(values, [1, 2]);
         }
 
-        assert_eq!(values, [1, 2]);
+        #[cfg(not(feature = "no-std"))]
+        {
+            let (values, len) = list.select_n_first_by::<2>(|a, b| a.cmp(b));
+            assert_eq!(len, 2);
+            assert_eq!(values, vec![1, 2]);
+        }
 
         // original list untouched
         assert_eq!(list.len(), 5);
@@ -522,17 +532,27 @@ mod tests {
             assert!(list.insert_tail(v).is_ok());
         }
 
-        let (arr, len) = list.select_n_first_by::<5>(|a, b| a.cmp(b));
-        assert_eq!(len, 3);
+        #[cfg(feature = "no-std")]
+        {
+            let (arr, len) = list.select_n_first_by::<5>(|a, b| a.cmp(b));
+            assert_eq!(len, 3);
 
-        let mut values = Vec::with_capacity(len);
-        unsafe {
-            for node in arr.iter().take(len) {
-                values.push(*node.assume_init_ref());
+            let mut values = Vec::with_capacity(len);
+            unsafe {
+                for node in arr.iter().take(len) {
+                    values.push(*node.assume_init_ref());
+                }
             }
+
+            assert_eq!(values, vec![2, 7, 9]);
         }
 
-        assert_eq!(values, vec![2, 7, 9]);
+        #[cfg(not(feature = "no-std"))]
+        {
+            let (values, len) = list.select_n_first_by::<5>(|a, b| a.cmp(b));
+            assert_eq!(len, 3);
+            assert_eq!(values, vec![2, 7, 9]);
+        }
     }
 
     #[test]
