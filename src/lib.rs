@@ -10,6 +10,8 @@
 pub mod double_linked_list;
 pub use double_linked_list as DoubleLinkedList;
 
+pub mod slice;
+
 #[derive(Debug)]
 pub enum LinkedListError {
     IndexOutOfRange,
