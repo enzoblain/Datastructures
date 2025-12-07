@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use datastructures::slice::core::keep_lowest;
+    use datastructures::array::core::keep_lowest;
 
     #[test]
     fn test_keep_lowest_basic_merge() {

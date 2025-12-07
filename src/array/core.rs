@@ -1,9 +1,13 @@
 use core::cmp::Ordering;
 
-/// Merges two sorted arrays in-place, keeping the N lowest elements in the first array.
+/// Merges two sorted arrays, keeping the N lowest elements.
 ///
-/// Takes two sorted arrays `s1` and `s2`, merges them, and modifies `s1` in-place to
-/// contain the N smallest elements in sorted order. Duplicates are preserved in the output.
+/// Takes two sorted arrays `s1` and `s2`, merges them, and modifies `s1` to
+/// contain the N smallest elements in sorted order. Duplicates are preserved.
+///
+/// # Complexity
+/// - Time: O(N)
+/// - Space: O(N) due to internal copy of `s1`
 ///
 /// # Type Parameters
 ///
@@ -12,13 +16,13 @@ use core::cmp::Ordering;
 ///
 /// # Arguments
 ///
-/// * `s1` - First sorted array (mutable), will be modified to contain the result
+/// * `s1` - First sorted array (mutable), modified with the result
 /// * `s2` - Second sorted array (consumed)
 ///
 /// # Example
 ///
 /// ```ignore
-/// use datastructures::slice::core::keep_lowest;
+/// use datastructures::array::core::keep_lowest;
 ///
 /// let mut a = [1, 3, 5, 7, 9];
 /// let b = [2, 4, 6, 8, 10];
@@ -26,6 +30,32 @@ use core::cmp::Ordering;
 /// assert_eq!(a, [1, 2, 3, 4, 5]);
 /// ```
 pub fn keep_lowest<T: Ord + Copy, const N: usize>(s1: &mut [T; N], s2: [T; N]) {
+    keep_lowest_by(s1, s2, |a, b| a.cmp(b));
+}
+
+/// Merges two sorted arrays with a custom comparator, keeping the N lowest elements.
+///
+/// Same as `keep_lowest` but allows custom comparison logic via the `compare` function.
+///
+/// # Complexity
+/// - Time: O(N)
+/// - Space: O(N) due to internal copy of `s1`
+///
+/// # Type Parameters
+///
+/// - `T`: Element type that must be `Copy`
+/// - `N`: Array size (compile-time constant)
+/// - `F`: Comparator function type
+///
+/// # Arguments
+///
+/// * `s1` - First sorted array (mutable), modified with the result
+/// * `s2` - Second sorted array (consumed)
+/// * `compare` - Comparator function that defines the sort order
+pub fn keep_lowest_by<T: Copy, const N: usize, F>(s1: &mut [T; N], s2: [T; N], compare: F)
+where
+    F: Fn(&T, &T) -> Ordering,
+{
     let s1_copy = *s1;
 
     let mut i1 = 0usize;
@@ -44,7 +74,7 @@ pub fn keep_lowest<T: Ord + Copy, const N: usize>(s1: &mut [T; N], s2: [T; N]) {
 
             v1
         } else {
-            match s1_copy[i1].cmp(&s2[i2]) {
+            match compare(&s1_copy[i1], &s2[i2]) {
                 Ordering::Less => {
                     let v1 = s1_copy[i1];
                     i1 += 1;

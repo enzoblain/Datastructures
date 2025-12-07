@@ -10,7 +10,7 @@
 pub mod double_linked_list;
 pub use double_linked_list as DoubleLinkedList;
 
-pub mod slice;
+pub mod array;
 
 #[derive(Debug)]
 pub enum LinkedListError {
