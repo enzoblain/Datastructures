@@ -22,17 +22,17 @@ use std::vec::Vec;
 ///
 /// let mut a = vec![1, 3, 5, 7, 9];
 /// let b = vec![2, 4, 6, 8, 10];
-/// keep_lowest_vec(&mut a, &b);
+/// keep_lowest_vec(&mut a, b);
 /// assert_eq!(a, vec![1, 2, 3, 4, 5]);
 /// ```
 #[cfg(not(feature = "no-std"))]
-pub fn keep_lowest_vec<T: Ord + Clone>(v1: &mut Vec<T>, v2: &[T]) {
+pub fn keep_lowest_vec<T: Ord + Clone>(v1: &mut Vec<T>, v2: Vec<T>) {
     keep_lowest_vec_by(v1, v2, |a, b| a.cmp(b));
 }
 
 /// Same as [`keep_lowest_vec`] but with a custom comparator.
 #[cfg(not(feature = "no-std"))]
-pub fn keep_lowest_vec_by<T: Clone, F>(v1: &mut Vec<T>, v2: &[T], compare: F)
+pub fn keep_lowest_vec_by<T: Clone, F>(v1: &mut Vec<T>, v2: Vec<T>, compare: F)
 where
     F: Fn(&T, &T) -> Ordering,
 {
