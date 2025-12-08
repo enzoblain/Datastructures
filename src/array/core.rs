@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use core::mem::MaybeUninit;
 
 /// Merges two sorted arrays, keeping the N lowest elements.
 ///
@@ -99,4 +100,60 @@ where
         s1[k] = v;
         k += 1;
     }
+}
+
+/// Converts a `MaybeUninit` array to an `Option` array.
+///
+/// Transforms an array of uninitialized values into an array of options.
+/// Only the first `size` elements are converted; the rest are set to `None`.
+///
+/// # Important
+/// The array must contain all initialized values at the beginning. The `size` parameter
+/// corresponds to the number of initialized elements.
+///
+/// # Complexity
+/// - Time: O(size)
+/// - Space: O(N)
+///
+/// # Type Parameters
+///
+/// - `T`: Element type that must be `Copy`
+/// - `N`: Array size (compile-time constant)
+///
+/// # Arguments
+///
+/// * `arr` - Array of `MaybeUninit<T>` with initialized values at the start
+/// * `size` - Number of initialized elements in the array
+///
+/// # Safety
+/// Assumes that the first `size` elements are properly initialized.
+///
+/// # Example
+///
+/// ```ignore
+/// use core::mem::MaybeUninit;
+/// use datastructures::array::core::swap_maybeuninit_to_option;
+///
+/// let mut arr: [MaybeUninit<i32>; 3] = [
+///     MaybeUninit::new(1),
+///     MaybeUninit::new(2),
+///     MaybeUninit::uninit(),
+/// ];
+/// let result = swap_maybeuninit_to_option(arr, 2);
+/// assert_eq!(result[0], Some(1));
+/// assert_eq!(result[1], Some(2));
+/// assert_eq!(result[2], None);
+/// ```
+pub fn swap_maybeuninit_to_option<T: Copy, const N: usize>(
+    arr: [MaybeUninit<T>; N],
+    size: usize,
+) -> [Option<T>; N] {
+    let mut out = [None; N];
+
+    for (i, item) in arr.iter().enumerate().take(size) {
+        let value = unsafe { item.assume_init_read() };
+        out[i] = Some(value);
+    }
+
+    out
 }

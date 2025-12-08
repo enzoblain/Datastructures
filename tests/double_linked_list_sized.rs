@@ -501,22 +501,15 @@ mod tests {
 
         #[cfg(feature = "no-std")]
         {
-            let (arr, len) = list.select_n_first_by::<2>(|a, b| a.cmp(b));
-            assert_eq!(len, 2);
-
-            let mut values = [0; 2];
-            unsafe {
-                values[0] = *arr[0].assume_init_ref();
-                values[1] = *arr[1].assume_init_ref();
-            }
-
-            assert_eq!(values, [1, 2]);
+            let arr = list.select_n_first_by::<2>(|a, b| a.cmp(b));
+            assert_eq!(arr[0], Some(1));
+            assert_eq!(arr[1], Some(2));
         }
 
         #[cfg(not(feature = "no-std"))]
         {
-            let (values, len) = list.select_n_first_by::<2>(|a, b| a.cmp(b));
-            assert_eq!(len, 2);
+            let values = list.select_n_first_by::<2>(|a, b| a.cmp(b));
+            assert_eq!(values.len(), 2);
             assert_eq!(values, vec![1, 2]);
         }
 
@@ -534,23 +527,18 @@ mod tests {
 
         #[cfg(feature = "no-std")]
         {
-            let (arr, len) = list.select_n_first_by::<5>(|a, b| a.cmp(b));
-            assert_eq!(len, 3);
-
-            let mut values = Vec::with_capacity(len);
-            unsafe {
-                for node in arr.iter().take(len) {
-                    values.push(*node.assume_init_ref());
-                }
-            }
-
-            assert_eq!(values, vec![2, 7, 9]);
+            let arr = list.select_n_first_by::<5>(|a, b| a.cmp(b));
+            assert_eq!(arr[0], Some(2));
+            assert_eq!(arr[1], Some(7));
+            assert_eq!(arr[2], Some(9));
+            assert_eq!(arr[3], None);
+            assert_eq!(arr[4], None);
         }
 
         #[cfg(not(feature = "no-std"))]
         {
-            let (values, len) = list.select_n_first_by::<5>(|a, b| a.cmp(b));
-            assert_eq!(len, 3);
+            let values = list.select_n_first_by::<5>(|a, b| a.cmp(b));
+            assert_eq!(values.len(), 3);
             assert_eq!(values, vec![2, 7, 9]);
         }
     }
@@ -563,23 +551,24 @@ mod tests {
         assert!(list.insert_tail(20).is_ok());
         assert!(list.insert_tail(30).is_ok());
 
-        let (nodes, len) = list.as_array();
+        let nodes = list.as_array();
 
-        assert_eq!(len, 3);
-
-        unsafe {
-            let n0 = nodes[0].assume_init_ref();
-            let n1 = nodes[1].assume_init_ref();
-            let n2 = nodes[2].assume_init_ref();
-
+        if let Some(n0) = nodes[0] {
             assert_eq!(n0.value, 10);
-            assert_eq!(n0.index, 0);
+        } else {
+            panic!("Expected node at index 0");
+        }
 
+        if let Some(n1) = nodes[1] {
             assert_eq!(n1.value, 20);
-            assert_eq!(n1.index, 1);
+        } else {
+            panic!("Expected node at index 1");
+        }
 
+        if let Some(n2) = nodes[2] {
             assert_eq!(n2.value, 30);
-            assert_eq!(n2.index, 2);
+        } else {
+            panic!("Expected node at index 2");
         }
 
         // Original list remains intact

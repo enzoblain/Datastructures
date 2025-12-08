@@ -33,9 +33,10 @@
 //! list.insert_tail(42);
 //! ```
 
+use crate::array::core::swap_maybeuninit_to_option;
 use crate::{Const, LinkedListError};
 
-use core::cmp::Ordering;
+use core::cmp::{Ordering, min};
 use core::mem::MaybeUninit;
 
 #[cfg(feature = "no-std")]
@@ -93,6 +94,7 @@ where
 ///
 /// Each node stores a value and pointers to the previous and next nodes.
 /// The `index` field tracks the node's position in the backing array.
+#[derive(Clone, Copy)]
 pub struct Node<T> {
     pub value: T,
     pub index: usize,
@@ -778,28 +780,32 @@ where
         cloned
     }
 
-    /// Returns the backing nodes array (cloned) along with the current length.
+    /// Returns the backing nodes array as an `Option` array.
     ///
-    /// Unused slots remain uninitialized (`MaybeUninit::uninit()`), while used slots
-    /// hold cloned `Node` values at their original indices. This avoids heap
-    /// allocation and is suitable for `no_std` contexts.
-    pub fn as_array(&self) -> ([MaybeUninit<Node<T>>; K], usize)
+    /// Returns an array where each slot corresponding to an initialized node contains `Some(Node)`,
+    /// and unused slots contain `None`. This provides access to all nodes without heap allocation,
+    /// suitable for `no_std` contexts.
+    ///
+    /// # Requirements
+    ///
+    /// `T` must be `Copy` to efficiently clone node values into the array.
+    pub fn as_array(&self) -> [Option<Node<T>>; K]
     where
-        T: Clone,
+        T: Copy,
     {
         let mut nodes_copy: [MaybeUninit<Node<T>>; K] =
             unsafe { MaybeUninit::uninit().assume_init() };
 
         let mut current = match self.head {
             Some(idx) => idx,
-            None => return (nodes_copy, 0),
+            None => return swap_maybeuninit_to_option(nodes_copy, 0),
         };
 
         loop {
             let n = unsafe { &*self.nodes[current].as_ptr() };
 
             let cloned = Node {
-                value: n.value.clone(),
+                value: n.value,
                 index: n.index,
                 prev: n.prev,
                 next: n.next,
@@ -813,29 +819,28 @@ where
             }
         }
 
-        (nodes_copy, self.len)
+        swap_maybeuninit_to_option(nodes_copy, self.len)
     }
 
     /// Selects up to `N` smallest values according to the comparator using quickselect,
     /// then returns them sorted by the same comparator.
     ///
     /// The function performs an in-place quickselect on stack-allocated index buffers
-    /// to partition the first `N` minimal elements (by `compare`) to the front. The
-    /// returned array contains cloned **values** for those elements, sorted by the
-    /// provided comparator. The accompanying `usize` indicates how many entries are
-    /// initialized (min(`N`, `self.len()`)).
+    /// to partition the first `N` minimal elements (by `compare`) to the front.
+    /// Returns an `Option` array where the first `min(N, self.len())` entries contain `Some(value)`,
+    /// and remaining entries are `None`. Elements are sorted by the provided comparator.
     #[cfg(feature = "no-std")]
     pub fn select_n_first_by<const N: usize>(
         &self,
         mut compare: impl FnMut(&T, &T) -> Ordering,
-    ) -> ([MaybeUninit<T>; N], usize)
+    ) -> [Option<T>; N]
     where
-        T: Clone,
+        T: Copy,
     {
         let mut out: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
 
         if self.len == 0 || N == 0 {
-            return (out, 0);
+            return swap_maybeuninit_to_option(out, 0);
         }
 
         // Gather indices in list order.
@@ -854,7 +859,7 @@ where
         }
 
         let len = self.len;
-        let target = core::cmp::min(N, len);
+        let target = min(N, len);
 
         // SAFETY: first `len` slots initialized above.
         let indices: &mut [usize] =
@@ -942,10 +947,10 @@ where
         for (dst, &idx) in out.iter_mut().take(target).zip(indices.iter().take(target)) {
             let n = unsafe { &*self.nodes[idx].as_ptr() };
 
-            dst.write(n.value.clone());
+            dst.write(n.value);
         }
 
-        (out, target)
+        swap_maybeuninit_to_option(out, target)
     }
 
     /// Sorts the list in-place using standard library's sort (faster than no_std version).
@@ -1037,12 +1042,12 @@ where
     pub fn select_n_first_by<const N: usize>(
         &self,
         mut compare: impl FnMut(&T, &T) -> Ordering,
-    ) -> (Vec<T>, usize)
+    ) -> Vec<T>
     where
         T: Clone,
     {
         if self.len == 0 || N == 0 {
-            return (Vec::new(), 0);
+            return Vec::new();
         }
 
         let mut indices = Vec::with_capacity(self.len);
@@ -1057,7 +1062,7 @@ where
             }
         }
 
-        let target = core::cmp::min(N, self.len);
+        let target = min(N, self.len);
 
         let mut cmp_indices = |&a: &usize, &b: &usize| {
             let va = unsafe { &*self.nodes[a].as_ptr() };
@@ -1072,14 +1077,12 @@ where
         indices.truncate(target);
         indices.sort_unstable_by(&mut cmp_indices);
 
-        let values = indices
+        indices
             .iter()
             .map(|&idx| {
                 let n = unsafe { &*self.nodes[idx].as_ptr() };
                 n.value.clone()
             })
-            .collect();
-
-        (values, target)
+            .collect()
     }
 }
