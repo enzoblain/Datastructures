@@ -23,20 +23,20 @@ use core::mem::MaybeUninit;
 /// # Example
 ///
 /// ```ignore
-/// use datastructures::array::core::keep_lowest;
+/// use datastructures::array::core::keep_lowest_array;
 ///
 /// let mut a = [1, 3, 5, 7, 9];
 /// let b = [2, 4, 6, 8, 10];
-/// keep_lowest(&mut a, b);
+/// keep_lowest_array(&mut a, b);
 /// assert_eq!(a, [1, 2, 3, 4, 5]);
 /// ```
-pub fn keep_lowest<T: Ord + Copy, const N: usize>(s1: &mut [T; N], s2: [T; N]) {
-    keep_lowest_by(s1, s2, |a, b| a.cmp(b));
+pub fn keep_lowest_array<T: Ord + Copy, const N: usize>(s1: &mut [T; N], s2: [T; N]) {
+    keep_lowest_array_by(s1, s2, |a, b| a.cmp(b));
 }
 
 /// Merges two sorted arrays with a custom comparator, keeping the N lowest elements.
 ///
-/// Same as `keep_lowest` but allows custom comparison logic via the `compare` function.
+/// Same as `keep_lowest_array` but allows custom comparison logic via the `compare` function.
 ///
 /// # Complexity
 /// - Time: O(N)
@@ -53,7 +53,7 @@ pub fn keep_lowest<T: Ord + Copy, const N: usize>(s1: &mut [T; N], s2: [T; N]) {
 /// * `s1` - First sorted array (mutable), modified with the result
 /// * `s2` - Second sorted array (consumed)
 /// * `compare` - Comparator function that defines the sort order
-pub fn keep_lowest_by<T: Copy, const N: usize, F>(s1: &mut [T; N], s2: [T; N], compare: F)
+pub fn keep_lowest_array_by<T: Copy, const N: usize, F>(s1: &mut [T; N], s2: [T; N], compare: F)
 where
     F: Fn(&T, &T) -> Ordering,
 {
@@ -132,19 +132,19 @@ where
 ///
 /// ```ignore
 /// use core::mem::MaybeUninit;
-/// use datastructures::array::core::swap_maybeuninit_to_option;
+/// use datastructures::array::core::swap_maybeuninit_to_option_array;
 ///
 /// let mut arr: [MaybeUninit<i32>; 3] = [
 ///     MaybeUninit::new(1),
 ///     MaybeUninit::new(2),
 ///     MaybeUninit::uninit(),
 /// ];
-/// let result = swap_maybeuninit_to_option(arr, 2);
+/// let result = swap_maybeuninit_to_option_array(arr, 2);
 /// assert_eq!(result[0], Some(1));
 /// assert_eq!(result[1], Some(2));
 /// assert_eq!(result[2], None);
 /// ```
-pub fn swap_maybeuninit_to_option<T: Copy, const N: usize>(
+pub fn swap_maybeuninit_to_option_array<T: Copy, const N: usize>(
     arr: [MaybeUninit<T>; N],
     size: usize,
 ) -> [Option<T>; N] {

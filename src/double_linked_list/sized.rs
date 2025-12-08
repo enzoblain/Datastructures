@@ -33,7 +33,7 @@
 //! list.insert_tail(42);
 //! ```
 
-use crate::array::core::swap_maybeuninit_to_option;
+use crate::array::core::swap_maybeuninit_to_option_array;
 use crate::{Const, LinkedListError};
 
 use core::cmp::{Ordering, min};
@@ -798,7 +798,7 @@ where
 
         let mut current = match self.head {
             Some(idx) => idx,
-            None => return swap_maybeuninit_to_option(nodes_copy, 0),
+            None => return swap_maybeuninit_to_option_array(nodes_copy, 0),
         };
 
         loop {
@@ -819,7 +819,7 @@ where
             }
         }
 
-        swap_maybeuninit_to_option(nodes_copy, self.len)
+        swap_maybeuninit_to_option_array(nodes_copy, self.len)
     }
 
     /// Selects up to `N` smallest values according to the comparator using quickselect,
@@ -840,7 +840,7 @@ where
         let mut out: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
 
         if self.len == 0 || N == 0 {
-            return swap_maybeuninit_to_option(out, 0);
+            return swap_maybeuninit_to_option_array(out, 0);
         }
 
         // Gather indices in list order.
@@ -950,7 +950,7 @@ where
             dst.write(n.value);
         }
 
-        swap_maybeuninit_to_option(out, target)
+        swap_maybeuninit_to_option_array(out, target)
     }
 
     /// Sorts the list in-place using standard library's sort (faster than no_std version).

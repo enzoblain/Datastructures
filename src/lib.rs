@@ -12,6 +12,7 @@
 //! - [`mod@double_linked_list`] - Fixed-size and unlimited capacity double-linked lists
 //! - [`mod@array`] - Array manipulation and conversion utilities
 //! - [`mod@option`] - Option type utilities and comparisons
+//! - [`mod@vec`] - Vector helpers for merging and MaybeUninit conversions
 
 /// Fixed-size and unlimited capacity double-linked list implementations.
 ///
@@ -30,6 +31,12 @@ pub mod array;
 ///
 /// Provides comparison and manipulation functions for `Option` types.
 pub mod option;
+
+/// Vector utilities for dynamic collections (std-only).
+///
+/// Provides helpers to merge sorted `Vec` values (`keep_lowest_vec`/`keep_lowest_vec_by`)
+/// and to convert `MaybeUninit` slices into `Vec<Option<T>>` when using `std`.
+pub mod vec;
 
 /// Errors that can occur during linked list operations.
 #[derive(Debug)]
