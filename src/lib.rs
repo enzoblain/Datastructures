@@ -32,6 +32,7 @@ pub mod array;
 /// Provides comparison and manipulation functions for `Option` types.
 pub mod option;
 
+#[cfg(not(feature = "no-std"))]
 /// Vector utilities for dynamic collections (std-only).
 ///
 /// Provides helpers to merge sorted `Vec` values (`keep_lowest_vec`/`keep_lowest_vec_by`)
