@@ -13,6 +13,7 @@
 //! - [`mod@array`] - Array manipulation and conversion utilities
 //! - [`mod@option`] - Option type utilities and comparisons
 //! - [`mod@vec`] - Vector helpers for merging and MaybeUninit conversions
+//! - [`mod@workstealing`] - Chase-Lev-inspired fixed-capacity work-stealing deque
 
 /// Fixed-size and unlimited capacity double-linked list implementations.
 ///
@@ -38,6 +39,11 @@ pub mod option;
 /// Provides helpers to merge sorted `Vec` values (`keep_lowest_vec`/`keep_lowest_vec_by`)
 /// and to convert `MaybeUninit` slices into `Vec<Option<T>>` when using `std`.
 pub mod vec;
+
+/// Work-stealing pools inspired by the Chase-Lev deque (fixed capacity).
+///
+/// Offers a bounded, lock-free deque with owner `insert`/`take` and worker `steal` operations.
+pub mod workstealing;
 
 /// Errors that can occur during linked list operations.
 #[derive(Debug)]

@@ -8,6 +8,7 @@ use std::vec::Vec;
 ///
 /// Takes two sorted vectors (they may differ in length), merges them, and
 /// overwrites `v1` with the `v1.len()` smallest elements in sorted order.
+/// The second vector is consumed to avoid extra cloning.
 /// Duplicates are preserved. This is the dynamic-length counterpart of
 /// `keep_lowest` for arrays.
 ///
@@ -30,7 +31,7 @@ pub fn keep_lowest_vec<T: Ord + Clone>(v1: &mut Vec<T>, v2: Vec<T>) {
     keep_lowest_vec_by(v1, v2, |a, b| a.cmp(b));
 }
 
-/// Same as [`keep_lowest_vec`] but with a custom comparator.
+/// Same as [`keep_lowest_vec`] but with a custom comparator and consuming `v2`.
 #[cfg(not(feature = "no-std"))]
 pub fn keep_lowest_vec_by<T: Clone, F>(v1: &mut Vec<T>, v2: Vec<T>, compare: F)
 where
